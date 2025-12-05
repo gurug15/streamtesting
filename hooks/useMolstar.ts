@@ -11,13 +11,13 @@ import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 import { BuiltInCoordinatesFormat } from "molstar/lib/mol-plugin-state/formats/coordinates";
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
 import { BuiltInTrajectoryFormat } from "molstar/lib/mol-plugin-state/formats/trajectory";
+import { applyFrameToMolstar } from "@/lib/molstarStreaming";
+import { useServerTrajectory } from "./useServerTrajectory";
 
-// Custom hook to encapsulate Mol* logic
 export const useMolstar = (
   canvasRef: RefObject<HTMLCanvasElement | null>,
   parentRef: RefObject<HTMLDivElement | null>
 ) => {
-  // Internal state for the plugin and UI
   const [plugin, setPlugin] = useState<PluginContext | null>(null);
   const [isPluginReady, setIsPluginReady] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -28,27 +28,23 @@ export const useMolstar = (
   >([]);
   const [frameCount, setFrameCount] = useState<number>(0);
   const [atomcount, setAtomcount] = useState<number>(0);
-  // const [rotationSpeed, setRotationSpeed] = useState(0.25);
   const [selectedRepresentation, setSelectedRepresentation] =
     useState<string>("default");
   const [isStructureLoaded, setIsStructureLoaded] = useState(false);
   const [isStereoEnabled, setIsStereoEnabled] = useState(false);
   const [topologyModel, setTopologyModel] = useState<any>(null);
   const [cordinateRef, setCordinateRef] = useState<any>(null);
+  const [modelRef, setModelRef] = useState<string | null>(null);
+  const { getFrameData } = useServerTrajectory("http://localhost:1337");
 
   // Effect for plugin initialization and disposal
   useEffect(() => {
-    // Create and initialize the plugin
     const initPlugin = async () => {
-      // console.log("Initializing Mol*Star...");
       try {
         const canvas = canvasRef.current;
         const parent = parentRef.current;
-        console.log("Canvas ref:", canvas);
-        console.log("Parent ref:", parent);
         if (!canvas || !parent) return;
 
-        // Use default spec for initialization
         const newPlugin = new PluginContext(DefaultPluginSpec());
         setPlugin(newPlugin);
 
@@ -56,10 +52,6 @@ export const useMolstar = (
 
         if (success) {
           setIsPluginReady(true);
-          // console.log("Mol*Star initialized successfully!");
-
-          // Set initial background color (original logic had this in spec,
-          // but better to set explicitly after init)
           newPlugin.canvas3d?.setProps({
             renderer: {
               backgroundColor: Color(parseInt(bgColor.replace("#", "0x"))),
@@ -78,14 +70,12 @@ export const useMolstar = (
 
     initPlugin();
 
-    // Cleanup on unmount
     return () => {
       plugin?.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasRef, parentRef]); // Only run once on mount
+  }, [canvasRef, parentRef]);
 
-  // --- Event Handlers as Functions ---
   function getFormatByExtension(
     filename: string
   ): BuiltInTrajectoryFormat | undefined {
@@ -93,7 +83,7 @@ export const useMolstar = (
     switch (ext) {
       case "mmcif":
       case "cif":
-        return "mmcif"; // or 'cifCore' as needed
+        return "mmcif";
       case "pdb":
         return "pdb";
       case "pdbqt":
@@ -108,9 +98,9 @@ export const useMolstar = (
         return "sdf";
       case "mol2":
         return "mol2";
-      case "data": // for LAMMPS data files
+      case "data":
         return "lammps_data";
-      case "traj": // for LAMMPS trajectory files
+      case "traj":
         return "lammps_traj_data";
       default:
         return undefined;
@@ -144,50 +134,69 @@ export const useMolstar = (
       console.warn("Plugin not ready yet!");
       return;
     }
-    if (!file || isStructureLoaded) return;
+    if (!file) return;
+
     const assetFile: Asset.File = {
       kind: "file",
       id: uuidv4() as UUID,
       name: file.name,
       file: file,
     };
-    await plugin.init();
-    // console.log("plugin in file select:", plugin);
+
     try {
+      await plugin.init();
       const data = await plugin.builders.data.readFile({
         file: assetFile,
         label: file.name,
         isBinary: false,
       });
+
       const format: BuiltInTrajectoryFormat | undefined = getFormatByExtension(
         file.name
       );
+
+      if (!format) {
+        console.error("Unsupported topology file format");
+        return;
+      }
+
       const topology = await plugin.builders.structure.parseTrajectory(
         data.data.ref,
-        format!
+        format
       );
-      const topologyModel = await plugin.builders.structure.createModel(
-        topology
-      );
-      setTopologyModel(topologyModel);
 
+      const model = await plugin.builders.structure.createModel(topology);
+      setTopologyModel(model);
       setIsStructureLoaded(true);
+
       const excludedTypes = [
         "gaussian-volume",
         "gaussian-surface",
         "ellipsoid",
         "carbohydrate",
       ];
-      // 2. Filter by checking if the name is NOT in the list
+
       const filteredTypes =
         plugin.representation.structure.registry.types.filter(
           (name) => !excludedTypes.includes(name[0])
         );
-      // console.log("Filtered representation types:", filteredTypes);
+      const models = await plugin.state.data.selectQ((q: any) =>
+        q.ofType(PluginStateObject.Molecule.Model)
+      );
+
+      if (models.length > 0) {
+        const ref = models[0].transform.ref;
+        console.log("Structure loaded. Model ref:", ref);
+        setModelRef(ref);
+        return ref; // ← RETURN THE REF
+      }
+
       setRepresentationTypes(filteredTypes);
       setSelectedRepresentation("default");
+
+      console.log("Topology loaded successfully");
     } catch (error) {
-      console.error(" Error loading file:", error);
+      console.error("Error loading topology file:", error);
     }
   };
 
@@ -204,99 +213,67 @@ export const useMolstar = (
       name: file.name,
       file: file,
     };
+
     try {
       const trajectoryData = await plugin.builders.data.readFile({
         file: assetFile,
         label: file.name,
         isBinary: true,
       });
+
       const format: BuiltInCoordinatesFormat | undefined =
         getMolstarCoordinatesFormat(file.name);
-      if (format === undefined) {
+
+      if (!format) {
         console.error("Unsupported trajectory file format");
         return;
       }
-      // console.log("all state data", plugin.state.data);
+
       const result = await plugin.dataFormats
         .get(format)
         ?.parse(plugin, trajectoryData.data.ref);
 
-      const cordinateRef = result.ref;
-
-      setCordinateRef(cordinateRef);
+      if (result?.ref) {
+        setCordinateRef(result.ref);
+        console.log("Trajectory loaded successfully");
+      }
     } catch (error: any) {
-      console.error("Transform failed:", error);
-    } // console.log("Current animation tick:", plugin.managers.animation.tick(60));
+      console.error("Error loading trajectory file:", error);
+    }
   };
 
   const loadStructureRepresentation = async () => {
-    if (!plugin) return;
+    if (!plugin || !topologyModel) {
+      console.error("Plugin or topology model not ready");
+      return null;
+    }
 
-    const newTrajectory = await plugin
-      .build()
-      .to(topologyModel)
-      .apply(
-        StateTransforms.Model.TrajectoryFromModelAndCoordinates,
-        {
-          modelRef: topologyModel.ref,
-          coordinatesRef: cordinateRef,
-        },
-        {
-          dependsOn: [topologyModel.ref, cordinateRef],
-        }
-      )
-      .commit();
     try {
-      await plugin.builders.structure.hierarchy.applyPreset(
-        newTrajectory,
-        "default"
-      );
-      const representations = plugin.state.data.selectQ((q) =>
-        q.ofType(PluginStateObject.Molecule.Structure.Representation3D)
-      );
+      // Create empty coordinates for initial load
+      const frameData = await getFrameData(0);
 
-      // Clear existing representations
-      for (const repr of representations) {
-        await plugin.build().delete(repr.transform.ref).commit();
+      if (frameData && modelRef) {
+        // 2. Apply to mol*
+        await applyFrameToMolstar(plugin, modelRef, frameData);
       }
-      handleSetRepresentation(selectedRepresentation);
-
-      setIsStructureLoaded(true);
-
-      console.log("=== CHECK #1: After applyPreset ===");
-      const structures1 = plugin.state.data.selectQ((q) =>
-        q.ofType(PluginStateObject.Molecule.Structure)
-      );
-      console.log("Structures found:", structures1.length);
-      console.log("Structure cells:", structures1);
-
-      if (structures1.length > 0) {
-        console.log("First structure obj:", structures1[0].obj);
-        console.log("Has data?", structures1[0].obj?.data);
-
-        if (structures1[0].obj?.data) {
-          console.log("Element count:", structures1[0].obj.data.elementCount);
-          setAtomcount(structures1[0].obj.data.elementCount);
-        }
-      }
-      setFrameCount(newTrajectory.cell?.obj?.data.frameCount || 0);
-      await plugin.managers.animation.start();
-    } catch (error: any) {
-      console.error("Failed to load structure representation:", error);
+      return modelRef;
+    } catch (error) {
+      console.error("Failed to load structure:", error);
+      return null;
     }
   };
 
   const toggleTragractoryAnimation = async () => {
     if (!plugin) return;
-    const curentAnimation = plugin.managers.animation.current;
-    console.log("Current animation:", plugin.managers.animation);
-    if (curentAnimation) {
+
+    try {
       if (plugin.managers.animation.isAnimating) {
-        console.log("animation:", plugin.managers.animation.isAnimating);
         await plugin.managers.animation.stop();
       } else {
         await plugin.managers.animation.start();
       }
+    } catch (error) {
+      console.error("Error toggling animation:", error);
     }
   };
 
@@ -305,8 +282,7 @@ export const useMolstar = (
       console.warn("Canvas not ready");
       return;
     }
-    // setRotationSpeed(rotateSpeed);
-    // Use the new state value for the logic
+
     const newSpinState = !isSpinning;
     setIsSpinning(newSpinState);
 
@@ -315,7 +291,7 @@ export const useMolstar = (
         animate: {
           name: "spin",
           params: {
-            speed: newSpinState ? 0.27 : 0, // Use new state
+            speed: newSpinState ? 0.27 : 0,
           },
         },
       },
@@ -334,13 +310,12 @@ export const useMolstar = (
     if (!plugin) return;
 
     const state = plugin.state.data;
-    const structures = state.selectQ((q) =>
+    const structures = state.selectQ((q: any) =>
       q.ofType(PluginStateObject.Molecule.Structure)
     );
 
     if (structures.length === 0) return;
 
-    // Update ONLY the color, keep same representation type
     await state
       .build()
       .to(structures[0])
@@ -349,7 +324,7 @@ export const useMolstar = (
         StateTransforms.Representation.StructureRepresentation3D,
         {
           type: {
-            name: selectedRepresentation || "cartoon", // Keep current type
+            name: selectedRepresentation || "cartoon",
             params: {},
           },
           colorTheme: {
@@ -373,19 +348,17 @@ export const useMolstar = (
 
     try {
       const state = plugin.state.data;
-      const structures = state.selectQ((q) =>
+      const structures = state.selectQ((q: any) =>
         q.ofType(PluginStateObject.Molecule.Structure)
       );
 
       if (structures.length === 0) return;
-      const structure = structures[0];
 
-      // Use applyOrUpdateTagged to update in-place instead of delete+create
       await state
         .build()
-        .to(structure)
+        .to(structures[0])
         .applyOrUpdateTagged(
-          "main-repr", // Stable tag - always use same tag for updates
+          "main-repr",
           StateTransforms.Representation.StructureRepresentation3D,
           {
             type: {
@@ -400,7 +373,10 @@ export const useMolstar = (
     }
   };
 
-  // Return state and handlers for the component to use
+  const getModelRef = () => {
+    return modelRef;
+  };
+
   return {
     state: {
       isPluginReady,
@@ -412,6 +388,8 @@ export const useMolstar = (
       isStereoEnabled,
       frameCount,
       atomcount,
+      plugin,
+      modelRef,
     },
     handlers: {
       onTopologyFileSelect: handleTopologyFileSelect,
@@ -421,8 +399,8 @@ export const useMolstar = (
       onSetRepresentation: (e: React.ChangeEvent<HTMLSelectElement>) =>
         handleSetRepresentation(e.target.value),
       toggleTragractoryAnimation: toggleTragractoryAnimation,
-
       loadStructureRepresentation: loadStructureRepresentation,
+      getModelRef: getModelRef,
     },
   };
 };

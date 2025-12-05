@@ -1,103 +1,92 @@
-"use client";
-import { createClient } from "@supabase/supabase-js";
-import axios from "axios";
-import { useState } from "react";
+import { Coordinates, Time } from "molstar/lib/mol-model/structure";
+import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
+import { TrajectoryFromModelAndCoordinates } from "molstar/lib/mol-plugin-state/transforms/model";
+import { PluginContext } from "molstar/lib/mol-plugin/context";
+import { StateTransformer } from "molstar/lib/mol-state";
+import { Task } from "molstar/lib/mol-task";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY!;
-const BUCKET_NAME = process.env.NEXT_PUBLIC_SUPABASE_BUCKET!;
-const MDSRV_SERVER_URL = process.env.NEXT_PUBLIC_MDSRV_URL;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { ParamDefinition } from "molstar/lib/mol-util/param-definition";
 
-export default function useFileUpload() {
-  const [publicUrl, setPublicUrl] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [fileUploaded, setFileUploaded] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [fileName, setFileName] = useState<string>("");
+const CreateTransformer = StateTransformer.builderFactory("custom");
 
-  const handleUpload = async (file: File) => {
-    if (!file) return;
-    setFileName(file.name);
-    setLoading(true);
-    setError("");
-    setUploadProgress(0);
+const CreateMyCoordinates = CreateTransformer({
+  name: "create-coords",
+  from: PluginStateObject.Root,
+  to: PluginStateObject.Molecule.Coordinates,
+  params: {
+    data: ParamDefinition.Value<number[][]>([], { isHidden: true }),
+  },
+})({
+  apply({ params }) {
+    return Task.create("Create Trajectory", async (ctx) => {
+      const coords = Coordinates.create(
+        params.data.map((cs, i) => ({
+          ...getCoords(cs),
+          elementCount: cs.length / 3,
+          time: Time(i, "step"),
+          xyzOrdering: { isIdentity: true },
+        })),
+        Time(1, "step"),
+        Time(0, "step")
+      );
 
-    try {
-      // Create unique filename to avoid conflicts
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${file.name}`;
-      const filePath = `public/${fileName}`;
+      return new PluginStateObject.Molecule.Coordinates(coords, {
+        label: "label",
+      });
+    });
+  },
+});
 
-      // Upload file
-      const { data, error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+function getCoords(data: number[]) {
+  const len = data.length / 3;
+  const x = new Float32Array(len);
+  const y = new Float32Array(len);
+  const z = new Float32Array(len);
+  for (let i = 0, _i = data.length, o = 0; i < _i; i += 3) {
+    x[o] = data[i];
+    y[o] = data[i + 1];
+    z[o] = data[i + 2];
+    o++;
+  }
+  return { x, y, z };
+}
 
-      if (uploadError) {
-        setError(`Upload failed: ${uploadError.message}`);
-        console.error("Upload error:", uploadError);
-        setLoading(false);
-        return;
-      } else {
-        setFileUploaded(true);
-      }
+async function createMyObjects(
+  plugin: PluginContext,
+  pdbData: string,
+  coordinates: number[][]
+) {
+  const _pdbData = await plugin.builders.data.rawData({
+    data: pdbData,
+    label: "...",
+  });
+  const pdbTrajectory = await plugin.builders.structure.parseTrajectory(
+    _pdbData,
+    "pdb"
+  );
+  const pdbModel = await plugin.builders.structure.createModel(pdbTrajectory);
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
+  const coords = await plugin
+    .build()
+    .toRoot()
+    .apply(CreateMyCoordinates, { data: coordinates })
+    .commit();
 
-      setPublicUrl(urlData.publicUrl);
-      setUploadProgress(100);
-      setLoading(false);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error:", err);
-      setLoading(false);
-    }
-  };
+  const trajectory = await plugin
+    .build()
+    .toRoot()
+    .apply(
+      TrajectoryFromModelAndCoordinates,
+      {
+        modelRef: pdbModel.ref,
+        coordinatesRef: coords.ref,
+      },
+      { dependsOn: [pdbModel.ref, coords.ref] }
+    )
+    .commit();
 
-  const uploadToMDSrv = async (
-    name: string = fileName.substring(0, fileName.lastIndexOf(".")),
-    description: string = "Uploaded trajectory",
-    source: string = "Supabase"
-  ) => {
-    if (!MDSRV_SERVER_URL || !publicUrl) {
-      setError("Missing MDsrv URL or file URL");
-      return;
-    }
-
-    try {
-      const endpoint = `${MDSRV_SERVER_URL}/upload/trajectory/${encodeURIComponent(
-        publicUrl
-      )}/${encodeURIComponent(name)}/${encodeURIComponent(
-        description
-      )}/${encodeURIComponent(source)}`;
-      const response = await axios.get(endpoint);
-
-      console.log("uploaded data to md:", response.data);
-      return response.data;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "MDsrv upload failed";
-      setError(errorMessage);
-      console.error("MDsrv error:", err);
-    }
-  };
-
-  return {
-    publicUrl,
-    handleUpload,
-    loading,
-    error,
-    fileUploaded,
-    uploadProgress,
-    uploadToMDSrv,
-  };
+  await plugin.builders.structure.hierarchy.applyPreset(
+    trajectory,
+    "all-models"
+  );
 }
