@@ -6,11 +6,14 @@ import { ProcessedFrame } from "./useServerTrajectory";
 
 type GetFrameFn = (index: number) => Promise<ProcessedFrame | null>;
 
+const BATCH_SIZE = 1;
+const PREFETCH_AHEAD = 1; // Prefetch 1 batch ahead
+
 export const useStreamingAnimation = (
   plugin: PluginContext | null,
   getFrameData: GetFrameFn,
   totalFrames: number,
-  modelRef: string | null // ← NEW: need model reference
+  modelRef: string | null
 ) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -20,30 +23,65 @@ export const useStreamingAnimation = (
   const currentFrameRef = useRef(1);
   const animationRef = useRef<number | null>(null);
   const isPlayingRef = useRef(false);
+  const prefetchedRef = useRef<Set<number>>(new Set()); // Track prefetched batches
+  const [fps, setFps] = useState<number>(30);
+  const fpsRef = useRef(fps);
+  // const animationLoop = async () => {
+  //   if (!isPlayingRef.current || !plugin || !modelRef) return;
+
+  //   try {
+  //     setIsLoading(true);
+  //     const frameData = await getFrameData(currentFrameRef.current);
+
+  //     if (frameData) {
+  //       // 2. Apply to mol*
+  //       await applyFrameToMolstar(plugin, modelRef, frameData);
+  //       setCurrentFrame(currentFrameRef.current);
+  //     }
+
+  //     setIsLoading(false);
+  //     if (currentFrameRef.current < totalFrames - 1) {
+  //       currentFrameRef.current++;
+  //       animationRef.current = requestAnimationFrame(animationLoop);
+  //     } else {
+  //       // End of trajectory
+  //       setIsPlaying(false);
+  //       isPlayingRef.current = false;
+  //       currentFrameRef.current = 0;
+  //     }
+  //   } catch (err) {
+  //     console.error("Animation loop error:", err);
+  //     setError(err instanceof Error ? err.message : String(err));
+  //     setIsLoading(false);
+  //     setIsPlaying(false);
+  //     isPlayingRef.current = false;
+  //   }
+  // };
+
+  useEffect(() => {
+    fpsRef.current = fps;
+  }, [fps]);
 
   const animationLoop = async () => {
     if (!isPlayingRef.current || !plugin || !modelRef) return;
 
     try {
       setIsLoading(true);
-
-      // 1. Fetch frame from server
       const frameData = await getFrameData(currentFrameRef.current);
 
       if (frameData) {
-        // 2. Apply to mol*
         await applyFrameToMolstar(plugin, modelRef, frameData);
         setCurrentFrame(currentFrameRef.current);
       }
 
       setIsLoading(false);
-
-      // 3. Move to next frame
       if (currentFrameRef.current < totalFrames - 1) {
         currentFrameRef.current++;
-        animationRef.current = requestAnimationFrame(animationLoop);
+        animationRef.current = setTimeout(
+          animationLoop,
+          1000 / fpsRef.current
+        ) as unknown as number;
       } else {
-        // End of trajectory
         setIsPlaying(false);
         isPlayingRef.current = false;
         currentFrameRef.current = 0;
@@ -108,6 +146,10 @@ export const useStreamingAnimation = (
       if (frameData) {
         await applyFrameToMolstar(plugin, modelRef, frameData);
       }
+
+      // Reset prefetch tracking when seeking
+      prefetchedRef.current.clear();
+
       setError(null);
     } catch (err) {
       console.error("Error going to frame:", err);
@@ -121,10 +163,12 @@ export const useStreamingAnimation = (
     isPlaying,
     currentFrame,
     isLoading,
+    fps: fps,
     error,
     play,
     pause,
     stop,
     goToFrame,
+    setFps,
   };
 };

@@ -29,6 +29,7 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
       if (ref) {
         setModelRef(ref);
         setStructureReady(true);
+        animation.play();
       }
     } catch (err) {
       console.error("Failed to load structure:", err);
@@ -42,13 +43,6 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
       await serverTraj.selectTrajectory(t);
     }
   };
-  console.log(
-    "allconditioin: ",
-    serverTraj.frameStarts.length > 0 && structureReady && modelRef
-  );
-  console.log("length count frames: ", serverTraj.frameStarts.length);
-  console.log("structure ref: ", structureReady);
-  console.log("modelref", modelRef);
 
   return (
     <div className="flex flex-col h-full p-4 overflow-y-auto space-y-6 text-white">
@@ -87,7 +81,7 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
 
         <button
           onClick={handleLoadStructure}
-          disabled={!plugin}
+          disabled={!plugin || animation.isLoading}
           className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white font-bold transition-colors"
         >
           Load Structure
@@ -124,6 +118,25 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
             {serverTraj.error}
           </div>
         )}
+      </div>
+
+      <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-sm">
+        <div>
+          <h3 className="text-sm font-bold text-yellow-400 mb-2 uppercase">
+            FPS Control
+          </h3>
+          <h3 className="mb-2">
+            Current FPS: <span className="font-mono">{animation.fps}</span>
+          </h3>
+        </div>
+        <input
+          type="range"
+          min="5"
+          max="60"
+          value={animation.fps}
+          onChange={(e) => animation.setFps(Number(e.target.value))}
+          className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm focus:border-yellow-500 outline-none"
+        />
       </div>
 
       {/* ANIMATION CONTROLS */}
@@ -169,11 +182,11 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
             </button>
           </div>
 
-          {animation.isLoading && (
+          {/* {animation.isLoading && (
             <div className="mt-2 text-xs text-blue-400 animate-pulse">
               Loading frame...
             </div>
-          )}
+          )} */}
 
           {animation.error && (
             <div className="mt-2 text-xs text-red-400 bg-red-900/20 p-2 rounded">

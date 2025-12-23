@@ -247,20 +247,7 @@ export const useMolstar = (
       console.error("Plugin or topology model not ready");
       return null;
     }
-
-    try {
-      // Create empty coordinates for initial load
-      const frameData = await getFrameData(0);
-
-      if (frameData && modelRef) {
-        // 2. Apply to mol*
-        await applyFrameToMolstar(plugin, modelRef, frameData);
-      }
-      return modelRef;
-    } catch (error) {
-      console.error("Failed to load structure:", error);
-      return null;
-    }
+    return modelRef;
   };
 
   const toggleTragractoryAnimation = async () => {

@@ -1,7 +1,7 @@
-import { FrameResponse } from "@/lib/types";
+import { Frame, FrameResponse } from "@/lib/types";
 import axios from "axios";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 const MDSRV_SERVER_URL = process.env.NEXT_PUBLIC_MDSRV_URL;
 
@@ -30,8 +30,9 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
   const [error, setError] = useState<string | null>(null);
 
   // ============ CACHE ============
-  // We keep the cache HERE, in the data layer
   const frameCache = useRef<Map<number, ProcessedFrame>>(new Map());
+  const lastPrefetchFrame = useRef(-1000); // Track last prefetch to throttle requests
+  const prefetchedRanges = useRef(new Set<number>()); // Track prefetched ranges to avoid duplicates
 
   // ============ 1. List Trajectories ============
   const listTrajectories = useCallback(async () => {
@@ -52,7 +53,9 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
       try {
         setSelectedTrajectory(entry);
         setIsLoading(true);
-        frameCache.current.clear(); // Clear cache for new file
+        frameCache.current.clear();
+        prefetchedRanges.current.clear();
+        lastPrefetchFrame.current = -1000;
 
         const response = await axios(
           `${serverUrl}/get/trajectory/${entry.id}/starts`
@@ -76,64 +79,223 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
     [serverUrl]
   );
 
-  // ============ 3. Fetch Single Frame (The core helper) ============
+  // ============ HELPER: Frame Conversion ============
+  const frameConversion = useCallback((frame: Frame) => {
+    const count = frame.count || frame.x.length;
+
+    const processed: ProcessedFrame = {
+      x: new Float32Array(count),
+      y: new Float32Array(count),
+      z: new Float32Array(count),
+      count,
+    };
+
+    for (let i = 0; i < count; i++) {
+      processed.x[i] = frame.x[i] ?? 0;
+      processed.y[i] = frame.y[i] ?? 0;
+      processed.z[i] = frame.z[i] ?? 0;
+    }
+    return processed;
+  }, []);
+  // ============ PREFETCH HELPER (Async, Non-blocking, PARALLEL) ============
+  const prefetchFrames = useCallback(
+    async (startFrameIndex: number) => {
+      // Don't prefetch if near end or invalid range
+      if (
+        startFrameIndex >= frameStarts.length ||
+        !selectedTrajectory ||
+        frameStarts.length === 0
+      ) {
+        return;
+      }
+
+      // Check if already prefetched to avoid duplicate requests
+      if (prefetchedRanges.current.has(startFrameIndex)) {
+        return;
+      }
+
+      try {
+        const prefetchStart = startFrameIndex;
+        const prefetchEnd = Math.min(startFrameIndex + 100, frameStarts.length);
+
+        // Check if all frames already cached
+        let allCached = true;
+        for (let i = prefetchStart; i < prefetchEnd; i++) {
+          if (!frameCache.current.has(i)) {
+            allCached = false;
+            break;
+          }
+        }
+        if (allCached) {
+          prefetchedRanges.current.add(startFrameIndex);
+          return;
+        }
+
+        // Mark as prefetching to avoid duplicate requests
+        prefetchedRanges.current.add(startFrameIndex);
+
+        // ✓ PARALLEL REQUESTS: Send 5 requests at once
+        const PARALLEL_COUNT = 5;
+        const startTime = performance.now();
+
+        // Process in batches of PARALLEL_COUNT
+        for (
+          let batchStart = prefetchStart;
+          batchStart < prefetchEnd;
+          batchStart += PARALLEL_COUNT
+        ) {
+          const batchEnd = Math.min(batchStart + PARALLEL_COUNT, prefetchEnd);
+
+          // Create array of promises for this batch
+          const batchPromises = [];
+
+          for (
+            let frameIndex = batchStart;
+            frameIndex < batchEnd;
+            frameIndex++
+          ) {
+            // Skip if already cached
+            if (frameCache.current.has(frameIndex)) {
+              continue;
+            }
+
+            const fetchStart = frameStarts[frameIndex];
+            const fetchEnd =
+              frameIndex + 1 < frameStarts.length
+                ? frameStarts[frameIndex + 1]
+                : Infinity;
+
+            // Create promise for this frame
+            const framePromise = axios(
+              `${serverUrl}/get/trajectory/${selectedTrajectory.id}/frame/offset/${fetchStart}/${fetchEnd}`
+            )
+              .then((response) => {
+                const data: FrameResponse = response.data;
+
+                if (data.frames && data.frames.length > 0) {
+                  const frame = data.frames[0];
+                  const processed: ProcessedFrame = frameConversion(frame);
+                  frameCache.current.set(frameIndex, processed);
+                }
+              })
+              .catch((err) => {
+                console.warn(`Failed to fetch frame ${frameIndex}:`, err);
+              });
+
+            batchPromises.push(framePromise);
+          }
+
+          // ✓ Wait for all requests in this batch to complete
+          if (batchPromises.length > 0) {
+            await Promise.all(batchPromises);
+          }
+        }
+
+        const endTime = performance.now();
+        const timeTaken = (endTime - startTime) / 1000;
+
+        console.log(
+          `✓ Prefetched frames ${prefetchStart}-${prefetchEnd - 1} (${
+            prefetchEnd - prefetchStart
+          } frames in ${timeTaken.toFixed(2)}s)`
+        );
+      } catch (err) {
+        console.warn("Prefetch failed:", err);
+      }
+    },
+    [serverUrl, selectedTrajectory, frameStarts, frameConversion]
+  );
+
+  // ============ CACHE CLEANUP - Sliding Window ============
+  const cleanupCache = useCallback((currentFrame: number) => {
+    const KEEP_BEHIND = 5;
+    const minFrameToKeep = Math.max(0, currentFrame - KEEP_BEHIND);
+
+    let deletedCount = 0;
+
+    // Delete all frames OLDER than (currentFrame - 5)
+    frameCache.current.forEach((_, frameNum) => {
+      if (frameNum < minFrameToKeep) {
+        frameCache.current.delete(frameNum);
+        deletedCount++;
+      }
+    });
+
+    // Log cache size every 100 frames to avoid spam
+    if (currentFrame % 100 === 0) {
+      console.log(
+        `Frame ${currentFrame} | Cache size: ${frameCache.current.size} | Deleted: ${deletedCount} old frames`
+      );
+    }
+  }, []);
+
+  // ============ 3. Fetch Single Frame with Prefetch ============
   const getFrameData = useCallback(
     async (frameIndex: number): Promise<ProcessedFrame | null> => {
       // 1. Check Cache
       if (frameCache.current.has(frameIndex)) {
+        // Trigger async prefetch in background (fire and forget)
+        // Only prefetch every 50 frames to throttle requests
+        if (frameIndex - lastPrefetchFrame.current > 20) {
+          lastPrefetchFrame.current = frameIndex;
+          prefetchFrames(frameIndex + 100).catch(console.error);
+        }
+
+        // Clean up old frames
+        cleanupCache(frameIndex);
+
         return frameCache.current.get(frameIndex)!;
       }
 
       if (!selectedTrajectory || frameStarts.length === 0) return null;
 
-      // 2. Prepare Request
-      const start = frameStarts[frameIndex];
-      const end =
-        frameIndex + 1 < frameStarts.length
-          ? frameStarts[frameIndex + 1]
-          : Infinity;
-
       try {
-        const response = await fetch(
+        const batchStart = frameIndex;
+        const batchEnd = Math.min(frameIndex + 1, frameStarts.length);
+        const start = frameStarts[batchStart];
+        const end =
+          batchEnd < frameStarts.length
+            ? frameStarts[batchEnd]
+            : frameStarts[frameStarts.length - 1] + 1;
+
+        // Fetch current frame
+        const response = await axios(
           `${serverUrl}/get/trajectory/${selectedTrajectory.id}/frame/offset/${start}/${end}`
         );
-        const data: FrameResponse = await response.json();
+        const data: FrameResponse = response.data;
 
-        if (!data.frames || data.frames.length === 0)
-          throw new Error("Empty frame");
-
-        // 3. Process Data (Convert to Float32Array here, once)
-        const frame = data.frames[0];
-        const count = frame.count || frame.x.length;
-
-        const processed: ProcessedFrame = {
-          x: new Float32Array(count),
-          y: new Float32Array(count),
-          z: new Float32Array(count),
-          count: count,
-        };
-
-        for (let i = 0; i < count; i++) {
-          processed.x[i] = frame.x[i] ?? 0;
-          processed.y[i] = frame.y[i] ?? 0;
-          processed.z[i] = frame.z[i] ?? 0;
-        }
-        console.log("noraml frames: ", frame);
-        console.log("Processed Frame ", processed);
-        // 4. Update Cache (Limit size to ~50 frames to save RAM)
-        if (frameCache.current.size > 50) {
-          const firstKey = frameCache.current.keys().next().value;
-          if (firstKey !== undefined) frameCache.current.delete(firstKey);
+        if (data.frames) {
+          data.frames.forEach((frame, idx) => {
+            const cacheIndex = batchStart + idx;
+            const processed: ProcessedFrame = frameConversion(frame);
+            frameCache.current.set(cacheIndex, processed);
+          });
         }
 
-        frameCache.current.set(frameIndex, processed);
-        return processed;
+        // Clean up old frames
+        cleanupCache(frameIndex);
+
+        // Trigger async prefetch in background (fire and forget)
+        // Only prefetch every 50 frames to throttle requests
+        if (frameIndex - lastPrefetchFrame.current > 50) {
+          lastPrefetchFrame.current = frameIndex;
+          prefetchFrames(frameIndex + 100).catch(console.error);
+        }
+
+        return frameCache.current.get(frameIndex) || null;
       } catch (err) {
         console.error(`Error fetching frame ${frameIndex}`, err);
         return null;
       }
     },
-    [serverUrl, selectedTrajectory, frameStarts]
+    [
+      serverUrl,
+      selectedTrajectory,
+      frameStarts,
+      frameConversion,
+      prefetchFrames,
+      cleanupCache,
+    ]
   );
 
   return {
@@ -144,6 +306,6 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
     error,
     listTrajectories,
     selectTrajectory,
-    getFrameData, // Expose this function to the animation hook
+    getFrameData,
   };
 };
