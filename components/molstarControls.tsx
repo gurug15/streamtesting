@@ -7,7 +7,7 @@ import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
 import { UseMolstarReturn } from "@/lib/types";
 
 const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
-  const serverTraj = useServerTrajectory("http://localhost:1337");
+  const serverTraj = useServerTrajectory();
   const [modelRef, setModelRef] = useState<string | null>(null);
   const [structureReady, setStructureReady] = useState(false);
   const plugin = state.plugin;
@@ -38,9 +38,9 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
 
   const handleSelect = async (id: string) => {
     animation.stop();
-    const t = serverTraj.trajectories.find((x) => x.id === id);
+    const t = serverTraj.trajectories.find((x) => x === id);
     if (t) {
-      await serverTraj.selectTrajectory(t);
+      await serverTraj.selectTrajectory(t as unknown as string);
     }
   };
 
@@ -81,7 +81,7 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
 
         <button
           onClick={handleLoadStructure}
-          disabled={!plugin || animation.isLoading}
+          disabled={!plugin || serverTraj.isLoading}
           className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white font-bold transition-colors"
         >
           Load Structure
@@ -101,15 +101,17 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
         ) : (
           <select
             onChange={(e) => handleSelect(e.target.value)}
-            value={serverTraj.selectedTrajectory?.id || ""}
+            value={(serverTraj.selectedTrajectory as string) || ""}
             className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm focus:border-green-500 outline-none"
           >
             <option value="">-- Choose Trajectory --</option>
-            {serverTraj.trajectories.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            {(serverTraj.trajectories as unknown as string[]).map(
+              (t, index) => (
+                <option key={index} value={t}>
+                  {t}
+                </option>
+              )
+            )}
           </select>
         )}
 
@@ -158,7 +160,13 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
             min="0"
             max={serverTraj.frameStarts.length - 1}
             value={animation.currentFrame}
-            onChange={(e) => animation.goToFrame(Number(e.target.value))}
+            onChange={(e) => {
+              if (animation.currentFrame >= serverTraj.frameStarts.length - 1) {
+                animation.goToFrame(0);
+                // animation.play();
+              }
+              animation.goToFrame(Number(e.target.value));
+            }}
             className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500 mb-4"
           />
 

@@ -75,8 +75,8 @@ export const useStreamingAnimation = (
       }
 
       setIsLoading(false);
-      if (currentFrameRef.current < totalFrames - 1) {
-        currentFrameRef.current++;
+      if (currentFrameRef.current < totalFrames) {
+        currentFrameRef.current = (currentFrameRef.current + 1) % totalFrames;
         animationRef.current = setTimeout(
           animationLoop,
           1000 / fpsRef.current
@@ -139,8 +139,8 @@ export const useStreamingAnimation = (
     try {
       setIsPlaying(false);
       setIsLoading(true);
-      currentFrameRef.current = frameIndex;
-      setCurrentFrame(frameIndex);
+      currentFrameRef.current = frameIndex % (totalFrames - 2);
+      setCurrentFrame(frameIndex % (totalFrames - 2));
 
       const frameData = await getFrameData(frameIndex);
       if (frameData) {
