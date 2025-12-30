@@ -26,37 +26,6 @@ export const useStreamingAnimation = (
   const prefetchedRef = useRef<Set<number>>(new Set()); // Track prefetched batches
   const [fps, setFps] = useState<number>(30);
   const fpsRef = useRef(fps);
-  // const animationLoop = async () => {
-  //   if (!isPlayingRef.current || !plugin || !modelRef) return;
-
-  //   try {
-  //     setIsLoading(true);
-  //     const frameData = await getFrameData(currentFrameRef.current);
-
-  //     if (frameData) {
-  //       // 2. Apply to mol*
-  //       await applyFrameToMolstar(plugin, modelRef, frameData);
-  //       setCurrentFrame(currentFrameRef.current);
-  //     }
-
-  //     setIsLoading(false);
-  //     if (currentFrameRef.current < totalFrames - 1) {
-  //       currentFrameRef.current++;
-  //       animationRef.current = requestAnimationFrame(animationLoop);
-  //     } else {
-  //       // End of trajectory
-  //       setIsPlaying(false);
-  //       isPlayingRef.current = false;
-  //       currentFrameRef.current = 0;
-  //     }
-  //   } catch (err) {
-  //     console.error("Animation loop error:", err);
-  //     setError(err instanceof Error ? err.message : String(err));
-  //     setIsLoading(false);
-  //     setIsPlaying(false);
-  //     isPlayingRef.current = false;
-  //   }
-  // };
 
   useEffect(() => {
     fpsRef.current = fps;

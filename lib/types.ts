@@ -44,3 +44,9 @@ export type UseMolstarReturn = {
     getModelRef: () => string | null;
   };
 };
+
+export interface RmsdUserInput {
+  trajectoryFileName: string;
+  topologyFileName: string;
+  outputfileName: string;
+}
