@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  act,
 } from "react";
 import {
   CartesianGrid,
@@ -22,9 +23,12 @@ import {
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { CategoricalChartState } from "recharts/types/chart/types";
+import { GraphData, useRMSD } from "@/hooks/useRmsd";
+import { useFileData } from "@/context/GromacsContext";
 
 interface ChartComponentProps {
-  rawData: number[][];
+  rawData: GraphData;
+  gotoFrame?: (frame: number) => void;
   xLabel?: string;
   yLabel?: string;
   lineColor?: string;
@@ -35,8 +39,9 @@ type ChartPoint = {
   y: number;
 };
 export function ChartComponent({
+  gotoFrame,
   rawData = [],
-  xLabel = "Time (ps)",
+  xLabel = "Time (frames)",
   yLabel = "RMSD (nm)",
   lineColor = "#0066ff",
 }: ChartComponentProps) {
@@ -48,8 +53,9 @@ export function ChartComponent({
   }>({ left: null, right: null });
   const [selecting, setSelecting] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
+  const { setDownloadPdbInputFile } = useFileData();
 
-  console.log("rawData in ChartComponent: ", rawData);
+  // console.log("rawData in ChartComponent: ", rawData);
   useEffect(() => {
     if (rawData && rawData.length > 0) {
       const formattedData = rawData.map((point) => ({
@@ -77,6 +83,13 @@ export function ChartComponent({
           setSelecting(true);
         }
       }
+      console.log("handleMouseDown called", e.activeLabel);
+      gotoFrame && gotoFrame(Number(e.activeLabel));
+      setDownloadPdbInputFile((prev) => ({
+        ...prev,
+        frameNumber: Number(e.activeLabel),
+      }));
+      console.log("gotoFrame called with:", e.activeLabel);
     },
     [chartData]
   );
@@ -345,6 +358,22 @@ export function ChartComponent({
           onTouchMove={handleZoom}
           ref={chartRef}
           style={{ touchAction: "none" }}
+          onClick={(e) => {
+            if (!chartRef.current || !gotoFrame) return;
+
+            const rect = chartRef.current.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const chartWidth = rect.width;
+            const percentage = clickX / chartWidth;
+
+            const { left, right } = range;
+            const clickedIndex = Math.floor(left + (right - left) * percentage);
+            const clickedPoint = chartData[clickedIndex];
+
+            if (clickedPoint) {
+              gotoFrame(clickedPoint.x);
+            }
+          }}
         >
           {memoizedChart}
         </div>

@@ -16,7 +16,7 @@ export interface Frame {
 import { PluginContext } from "molstar/lib/mol-plugin/context";
 
 export type UseMolstarReturn = {
-  state: {
+  state?: {
     isPluginReady: boolean;
     isSpinning: boolean;
     bgColor: string;
@@ -29,7 +29,7 @@ export type UseMolstarReturn = {
     plugin: PluginContext | null;
     modelRef: string | null;
   };
-  handlers: {
+  handlers?: {
     onTopologyFileSelect: (file: File | null) => Promise<any>;
     onTrajectoryFileSelect: (file: File | null) => Promise<void>;
     onToggleSpin: () => void;
@@ -43,10 +43,36 @@ export type UseMolstarReturn = {
     loadStructureRepresentation: () => Promise<string | null>;
     getModelRef: () => string | null;
   };
+  serverTraj?: {
+    trajectories: string[];
+    selectedTrajectory: string | null;
+    frameStarts: number[];
+    isLoading: boolean;
+    error: string | null;
+    listTrajectories: () => Promise<void>;
+    selectTrajectory: (trajectory: string) => Promise<void>;
+    getFrameData: (frameIndex: number) => Promise<any>;
+  };
+  animation?: {
+    isPlaying: boolean;
+    currentFrame: number;
+    isLoading: boolean;
+    fps: number;
+    error: string | null;
+    play: () => void;
+    pause: () => void;
+    stop: () => void;
+    goToFrame: (frameIndex: number) => void;
+    setFps: (fps: number) => void;
+  };
 };
 
 export interface RmsdUserInput {
   trajectoryFileName: string;
   topologyFileName: string;
   outputfileName: string;
+  firstFrame: number;
+  lastFrame: number;
+  groupLsFit: number;
+  groupRMSD: number;
 }

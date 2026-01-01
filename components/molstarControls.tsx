@@ -5,19 +5,29 @@ import { useServerTrajectory } from "@/hooks/useServerTrajectory";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
 import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
 import { UseMolstarReturn } from "@/lib/types";
+import { useFileData } from "@/context/GromacsContext";
+import { Button } from "./ui/button";
 
-const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
-  const serverTraj = useServerTrajectory();
+const MolstarControls = ({
+  state,
+  handlers,
+  serverTraj,
+  animation,
+}: UseMolstarReturn) => {
+  // const serverTraj = useServerTrajectory();
   const [modelRef, setModelRef] = useState<string | null>(null);
   const [structureReady, setStructureReady] = useState(false);
-  const plugin = state.plugin;
-  const animation = useStreamingAnimation(
-    plugin,
-    serverTraj.getFrameData,
-    serverTraj.frameStarts.length,
-    modelRef
-  );
-
+  const { setRmsdInputFilenames, setDownloadPdbInputFile } = useFileData();
+  // const animation = useStreamingAnimation(
+  //   plugin,
+  //   serverTraj.getFrameData,
+  //   serverTraj.frameStarts.length,
+  //   modelRef
+  // );
+  if (!serverTraj || !animation || !handlers || !state) {
+    return <div>Loading controls...</div>;
+  }
+  const plugin = state!.plugin;
   useEffect(() => {
     serverTraj.listTrajectories();
   }, []);
@@ -29,13 +39,16 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
       if (ref) {
         setModelRef(ref);
         setStructureReady(true);
+        setRmsdInputFilenames((prev) => ({
+          ...prev,
+          lastFrame: serverTraj.frameStarts.length,
+        }));
         animation.play();
       }
     } catch (err) {
       console.error("Failed to load structure:", err);
     }
   };
-
   const handleSelect = async (id: string) => {
     animation.stop();
     const t = serverTraj.trajectories.find((x) => x === id);
@@ -58,9 +71,18 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
         <input
           type="file"
           accept=".pdb,.gro,.cif,.mmcif"
+          required
           onChange={(e) => {
             if (e.target.files?.[0]) {
               handlers.onTopologyFileSelect(e.target.files[0]);
+              setRmsdInputFilenames((prev) => ({
+                ...prev,
+                topologyFileName: e.target.files![0].name,
+              }));
+              setDownloadPdbInputFile((prev) => ({
+                ...prev,
+                topologyFileName: e.target.files![0].name,
+              }));
             }
           }}
           className="block w-full text-xs text-gray-400
@@ -73,20 +95,18 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
         />
       </div>
 
-      {/* LOAD STRUCTURE */}
-      <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-sm">
-        <h3 className="text-sm font-bold text-purple-400 mb-2 uppercase">
-          2. Initialize Structure
-        </h3>
-
-        <button
-          onClick={handleLoadStructure}
-          disabled={!plugin || serverTraj.isLoading}
-          className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white font-bold transition-colors"
-        >
-          Load Structure
-        </button>
-      </div>
+      <input
+        type="text"
+        onChange={(e) => {
+          setRmsdInputFilenames((prev) => ({
+            ...prev,
+            outputfileName: e.target.value,
+          }));
+        }}
+        required
+        className="w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-sm focus:border-green-500 outline-none"
+        placeholder="output file name for rmsd"
+      />
 
       {/* SERVER TRAJECTORY */}
       <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-sm">
@@ -100,8 +120,19 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
           </div>
         ) : (
           <select
-            onChange={(e) => handleSelect(e.target.value)}
+            onChange={(e) => {
+              handleSelect(e.target.value);
+              setRmsdInputFilenames((prev) => ({
+                ...prev,
+                trajectoryFileName: e.target.value,
+              }));
+              setDownloadPdbInputFile((prev) => ({
+                ...prev,
+                trajectoryFileName: e.target.value,
+              }));
+            }}
             value={(serverTraj.selectedTrajectory as string) || ""}
+            required
             className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm focus:border-green-500 outline-none"
           >
             <option value="">-- Choose Trajectory --</option>
@@ -120,6 +151,21 @@ const MolstarControls = ({ state, handlers }: UseMolstarReturn) => {
             {serverTraj.error}
           </div>
         )}
+      </div>
+
+      {/* LOAD STRUCTURE */}
+      <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-sm">
+        <h3 className="text-sm font-bold text-purple-400 mb-2 uppercase">
+          2. Initialize Structure
+        </h3>
+
+        <button
+          onClick={handleLoadStructure}
+          disabled={!plugin || serverTraj.isLoading}
+          className="w-full py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-white font-bold transition-colors"
+        >
+          Load Structure
+        </button>
       </div>
 
       <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-sm">
