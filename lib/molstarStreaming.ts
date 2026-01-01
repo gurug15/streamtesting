@@ -1,5 +1,10 @@
 // lib/molstarStreaming.ts
-import { Coordinates, Time } from "molstar/lib/mol-model/structure";
+import {
+  Coordinates,
+  QueryContext,
+  StructureSelection,
+  Time,
+} from "molstar/lib/mol-model/structure";
 import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 import { TrajectoryFromModelAndCoordinates } from "molstar/lib/mol-plugin-state/transforms/model";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
@@ -7,7 +12,11 @@ import { StateTransformer } from "molstar/lib/mol-state";
 import { Task } from "molstar/lib/mol-task";
 import { ParamDefinition } from "molstar/lib/mol-util/param-definition";
 import { ProcessedFrame } from "@/hooks/useServerTrajectory";
-
+import { compile } from "molstar/lib/mol-script/runtime/query/base";
+import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
+import { MolScriptBuilder as MS } from "molstar/lib/mol-script/language/builder";
+import { tmAlign } from "molstar/lib/mol-model/structure/structure/util/tm-align";
+// import { TMAlign } from "molstar/lib/mol-math/linear-algebra/3d/tm-align";
 const CreateTransformer = StateTransformer.builderFactory("custom");
 
 export const CreateMyCoordinates = CreateTransformer({
@@ -116,10 +125,106 @@ export async function applyFrameToMolstar(
     if (plugin.canvas3d) {
       plugin.canvas3d.requestDraw(); // Async full redraw
     }
-
     return TRAJ_REF;
   } catch (err) {
     console.error("Error applying frame to mol*:", err);
     throw err;
   }
 }
+
+export async function superimposeStructures(
+  plugin: PluginContext,
+  streamingStructureRef: string
+  // referenceStructureRef: string
+): Promise<any> {
+  // ): Promise<{ tmScore: number; rmsd: number }> {
+  try {
+    const streamingStructure = plugin.state.data.selectQ(
+      (q: any) => q.byRef(streamingStructureRef) //.ofType(PluginStateObject.Molecule.Structure)
+    );
+
+    // const referenceStructure = plugin.state.data.selectQ(
+    //   (q: any) => q.byRef(referenceStructureRef) //.ofType(PluginStateObject.Molecule.Structure)
+    // );
+    console.log("streamingStructure type:", typeof streamingStructure);
+    console.log(
+      "streamingStructure keys:",
+      Object.keys(streamingStructure || {})
+    );
+    console.log("streamingStructure:", streamingStructure);
+    // if (!streamingStructure?.obj?.data || !referenceStructure?.obj?.data) {
+    //   throw new Error("Structures not found in state");
+    // }
+
+    // Query for C-alpha atoms
+    const caQuery = compile<StructureSelection>(
+      MS.struct.generator.atomGroups({
+        "chain-test": MS.core.rel.eq([
+          MS.struct.atomProperty.macromolecular.auth_asym_id(),
+          "A",
+        ]),
+        "atom-test": MS.core.rel.eq([
+          MS.struct.atomProperty.macromolecular.label_atom_id(),
+          "CA",
+        ]),
+      })
+    );
+
+    // const sel1 = StructureSelection.toLociWithCurrentUnits(
+    //   caQuery(new QueryContext(referenceStructure.obj.data))
+    // );
+    // const sel2 = StructureSelection.toLociWithCurrentUnits(
+    //   caQuery(new QueryContext(streamingStructure.obj.data))
+    // );
+
+    // Extract positions
+    // // const posA = extractPositions(sel1);
+    // const posB = extractPositions(sel2);
+
+    // Run TM-align
+    // const result = TMAlign.compute({
+    //   a: posA,
+    //   b: posB,
+    // });
+
+    // Apply transformation
+    // const b = plugin.state.data
+    //   .build()
+    //   .to(streamingStructureRef)
+    //   .insert(StateTransforms.Model.TransformStructureConformation, {
+    //     transform: {
+    //       name: "matrix",
+    //       params: {
+    //         data: result.bTransform,
+    //         transpose: false,
+    //       },
+    //     },
+    //   });
+
+    // await plugin.runTask(plugin.state.data.updateTree(b));
+
+    // if (plugin.canvas3d) {
+    //   plugin.canvas3d.requestDraw();
+    // }
+
+    // return {
+    //   tmScore: result.tmScoreA,
+    //   rmsd: result.rmsd,
+    // };
+  } catch (err) {
+    console.error("Error superimposing structures:", err);
+    throw err;
+  }
+}
+
+// function extractPositions(loci: any): TMAlign.Positions {
+//   // Extract x, y, z arrays from loci
+//   // Adjust based on your actual data structure
+//   const x: number[] = [];
+//   const y: number[] = [];
+//   const z: number[] = [];
+
+//   // Your extraction logic here
+
+//   return { x, y, z };
+// }

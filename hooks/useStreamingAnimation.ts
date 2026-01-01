@@ -1,7 +1,10 @@
 // hooks/useStreamingAnimation.ts
 import { useEffect, useRef, useState } from "react";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
-import { applyFrameToMolstar } from "@/lib/molstarStreaming";
+import {
+  applyFrameToMolstar,
+  superimposeStructures,
+} from "@/lib/molstarStreaming";
 import { ProcessedFrame } from "./useServerTrajectory";
 
 type GetFrameFn = (index: number) => Promise<ProcessedFrame | null>;
@@ -39,7 +42,8 @@ export const useStreamingAnimation = (
       const frameData = await getFrameData(currentFrameRef.current);
 
       if (frameData) {
-        await applyFrameToMolstar(plugin, modelRef, frameData);
+        const ref = await applyFrameToMolstar(plugin, modelRef, frameData);
+        await superimposeStructures(plugin, ref);
         setCurrentFrame(currentFrameRef.current);
       }
 
@@ -113,7 +117,7 @@ export const useStreamingAnimation = (
 
       const frameData = await getFrameData(frameIndex);
       if (frameData) {
-        await applyFrameToMolstar(plugin, modelRef, frameData);
+        const ref = await applyFrameToMolstar(plugin, modelRef, frameData);
       }
 
       // Reset prefetch tracking when seeking
