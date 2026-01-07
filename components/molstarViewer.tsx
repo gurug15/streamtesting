@@ -33,9 +33,10 @@ const MolstarViewer = () => {
         </div>
         <div className="w-full h-1/2">
           <GraphDisplay
-            gotoFrame={animation.goToFrame}
+            gotoFrameFromGraph={animation.goToFrameFromGraph}
+            removeSuperimposedStrucure={animation.removeSuperimposedStructure}
             graphData={[]}
-            xLabel="Time (frames)"
+            xLabel="Time (frame)"
             yLabel="RMSD (nm)"
           />
         </div>

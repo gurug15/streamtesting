@@ -13,13 +13,19 @@ import { createContext } from "react";
 export interface TrajectoryFrameInput {
   topologyFileName: string;
   trajectoryFileName: string;
-  frameNumber: number;
+  picoSecNumber: number;
   rmsdDeviation?: number;
 }
+
+import { CheckedState } from "@radix-ui/react-checkbox";
 
 interface FileContextType {
   rmsdinputfilenames: RmsdUserInput;
   downloadPdbInputFile: TrajectoryFrameInput;
+  superImposed: CheckedState;
+  pstoframe: number;
+  setPsTOFrame: Dispatch<SetStateAction<number>>;
+  setSuperImposed: Dispatch<SetStateAction<CheckedState>>;
   setDownloadPdbInputFile: Dispatch<SetStateAction<TrajectoryFrameInput>>;
   setRmsdInputFilenames: Dispatch<SetStateAction<RmsdUserInput>>;
 }
@@ -42,10 +48,12 @@ export function GromacsFileProvider({
   });
   const [downloadPdbInputFile, setDownloadPdbInputFile] =
     useState<TrajectoryFrameInput>({
-      frameNumber: 1,
+      picoSecNumber: 0,
       topologyFileName: "",
       trajectoryFileName: "",
     });
+  const [superImposed, setSuperImposed] = useState<CheckedState>(false);
+  const [pstoframe, setPsTOFrame] = useState<number>(1);
   return (
     <Filecontext.Provider
       value={{
@@ -53,6 +61,10 @@ export function GromacsFileProvider({
         setRmsdInputFilenames,
         downloadPdbInputFile,
         setDownloadPdbInputFile,
+        superImposed,
+        setSuperImposed,
+        pstoframe,
+        setPsTOFrame,
       }}
     >
       {children}

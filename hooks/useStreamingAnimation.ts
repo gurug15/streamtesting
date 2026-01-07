@@ -1,13 +1,22 @@
 // hooks/useStreamingAnimation.ts
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
-import { applyFrameToMolstar } from "@/lib/molstarStreaming";
+import {
+  alignStructures,
+  applyFrameToMolstar,
+  loadReferenceStructure,
+} from "@/lib/molstarStreaming";
 import { ProcessedFrame } from "./useServerTrajectory";
+import { useFileData } from "@/context/GromacsContext";
+import { useRMSD } from "./useRmsd";
+import { backendUrl } from "@/components/gromacs/GraphDisplay";
+import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 
 type GetFrameFn = (index: number) => Promise<ProcessedFrame | null>;
+type RefRef = { structureRef: any; structure: any } | null;
 
 const BATCH_SIZE = 1;
-const PREFETCH_AHEAD = 1; // Prefetch 1 batch ahead
+const PREFETCH_AHEAD = 1;
 
 export const useStreamingAnimation = (
   plugin: PluginContext | null,
@@ -19,19 +28,28 @@ export const useStreamingAnimation = (
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fps, setFps] = useState<number>(30);
+  const [referenceStructureRef, setReferenceStructureRef] =
+    useState<RefRef>(null);
+  const [streamingref, setStreamingRef] = useState<any>();
 
+  // Refs for non-state values
   const currentFrameRef = useRef(1);
   const animationRef = useRef<number | null>(null);
   const isPlayingRef = useRef(false);
-  const prefetchedRef = useRef<Set<number>>(new Set()); // Track prefetched batches
-  const [fps, setFps] = useState<number>(30);
   const fpsRef = useRef(fps);
+  const prefetchedRef = useRef<Set<number>>(new Set());
 
+  const { superImposed, downloadPdbInputFile } = useFileData();
+  const { pdbFromFrame } = useRMSD();
+
+  // Sync fps to ref
   useEffect(() => {
     fpsRef.current = fps;
   }, [fps]);
 
-  const animationLoop = async () => {
+  // Animation loop
+  const animationLoop = useCallback(async () => {
     if (!isPlayingRef.current || !plugin || !modelRef) return;
 
     try {
@@ -39,11 +57,17 @@ export const useStreamingAnimation = (
       const frameData = await getFrameData(currentFrameRef.current);
 
       if (frameData) {
-        await applyFrameToMolstar(plugin, modelRef, frameData);
+        const streamRef = await applyFrameToMolstar(
+          plugin,
+          modelRef,
+          frameData
+        );
+        setStreamingRef(streamRef);
         setCurrentFrame(currentFrameRef.current);
       }
 
       setIsLoading(false);
+
       if (currentFrameRef.current < totalFrames) {
         currentFrameRef.current = (currentFrameRef.current + 1) % totalFrames;
         animationRef.current = setTimeout(
@@ -62,8 +86,9 @@ export const useStreamingAnimation = (
       setIsPlaying(false);
       isPlayingRef.current = false;
     }
-  };
+  }, [plugin, modelRef, getFrameData]);
 
+  // Play/pause/stop effect
   useEffect(() => {
     isPlayingRef.current = isPlaying;
 
@@ -71,73 +96,219 @@ export const useStreamingAnimation = (
       animationLoop();
     } else {
       if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
         animationRef.current = null;
       }
     }
 
     return () => {
       if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
         animationRef.current = null;
       }
     };
-  }, [isPlaying, totalFrames, plugin, modelRef, getFrameData]);
+  }, [isPlaying, totalFrames, plugin, modelRef, animationLoop]);
 
-  const play = () => {
+  // Delete previous reference structure
+  const deletePreviousReference = useCallback(async () => {
+    if (!referenceStructureRef || !superImposed || !plugin) return;
+
+    try {
+      const structToDelete = referenceStructureRef.structure.ref;
+      if (structToDelete) {
+        await plugin.build().delete(structToDelete).commit();
+      }
+    } catch (err) {
+      console.error("Error removing previous structure:", err);
+    }
+  }, [referenceStructureRef, superImposed, plugin]);
+
+  // Load and set new reference structure
+  const loadNewReferenceStructure = useCallback(async () => {
+    if (!superImposed) return null;
+
+    try {
+      const outputFileName = await pdbFromFrame(downloadPdbInputFile);
+      if (!outputFileName.length) return null;
+
+      const pdbUrl = `${backendUrl}/analysis/download/pdb/${outputFileName}`;
+      const response = await fetch(pdbUrl);
+      const blob = await response.blob();
+      const file = new File([blob], outputFileName, {
+        type: "chemical/x-pdb",
+      });
+
+      const refRef = await loadReferenceStructure(plugin!, file);
+      setReferenceStructureRef(refRef);
+      return refRef;
+    } catch (err) {
+      console.error("Error loading reference structure:", err);
+      return null;
+    }
+  }, [superImposed, downloadPdbInputFile, pdbFromFrame, plugin]);
+
+  // Update current frame and streaming data
+  const updateStreamingFrame = useCallback(
+    async (frameIndex: number) => {
+      if (frameIndex < 0 || frameIndex >= totalFrames || !plugin || !modelRef)
+        return;
+
+      try {
+        const frameData = await getFrameData(frameIndex);
+        if (frameData) {
+          const streamRef = await applyFrameToMolstar(
+            plugin,
+            modelRef,
+            frameData
+          );
+          setStreamingRef(streamRef);
+        }
+      } catch (err) {
+        console.error("Error updating streaming frame:", err);
+        throw err;
+      }
+    },
+    [totalFrames, plugin, modelRef, getFrameData]
+  );
+
+  // Align structures
+  const performAlignment = useCallback(
+    async (refRef: RefRef) => {
+      if (!superImposed || !refRef || !streamingref || !plugin) return;
+
+      try {
+        const result = await alignStructures(
+          plugin,
+          streamingref,
+          refRef.structureRef
+        );
+        // console.log("Aligned - TM-score:", result.tmScoreA, "RMSD:", result.rmsd);
+        return result;
+      } catch (err) {
+        console.error("Error during alignment:", err);
+        throw err;
+      }
+    },
+    [superImposed, streamingref, plugin]
+  );
+
+  // Public methods
+  const play = useCallback(() => {
     if (totalFrames > 0 && modelRef) {
       setIsPlaying(true);
       setError(null);
     }
-  };
+  }, [totalFrames, modelRef]);
 
-  const pause = () => {
+  const pause = useCallback(() => {
     setIsPlaying(false);
-  };
+  }, []);
 
-  const stop = () => {
+  const stop = useCallback(() => {
     setIsPlaying(false);
     currentFrameRef.current = 0;
     setCurrentFrame(0);
-  };
+  }, []);
 
-  const goToFrame = async (frameIndex: number) => {
-    if (frameIndex < 0 || frameIndex >= totalFrames || !plugin || !modelRef)
-      return;
+  const goToFrame = useCallback(
+    async (frameIndex: number) => {
+      if (frameIndex < 0 || frameIndex >= totalFrames || !plugin || !modelRef)
+        return;
 
-    try {
-      setIsPlaying(false);
-      setIsLoading(true);
-      currentFrameRef.current = frameIndex % (totalFrames - 2);
-      setCurrentFrame(frameIndex % (totalFrames - 2));
+      try {
+        setIsLoading(true);
+        currentFrameRef.current = frameIndex % totalFrames;
+        setCurrentFrame(frameIndex % totalFrames);
 
-      const frameData = await getFrameData(frameIndex);
-      if (frameData) {
-        await applyFrameToMolstar(plugin, modelRef, frameData);
+        await updateStreamingFrame(frameIndex);
+        prefetchedRef.current.clear();
+        setError(null);
+      } catch (err) {
+        console.error("Error going to frame:", err);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsLoading(false);
       }
+    },
+    [totalFrames, plugin, modelRef, updateStreamingFrame]
+  );
 
-      // Reset prefetch tracking when seeking
-      prefetchedRef.current.clear();
+  const goToFrameFromGraph = useCallback(
+    async (frameIndex: number) => {
+      if (frameIndex < 0 || frameIndex >= totalFrames || !plugin || !modelRef)
+        return;
 
-      setError(null);
+      try {
+        setIsLoading(true);
+
+        // Delete previous reference if superimposed
+        await deletePreviousReference();
+
+        // Load new reference structure if superimposed
+        const refRef = await loadNewReferenceStructure();
+
+        // Update streaming frame
+        if (!superImposed) {
+          currentFrameRef.current = frameIndex % totalFrames;
+          setCurrentFrame(frameIndex % totalFrames);
+          await updateStreamingFrame(frameIndex);
+        }
+
+        // Perform alignment if superimposed
+        if (refRef) {
+          await performAlignment(refRef);
+        }
+
+        prefetchedRef.current.clear();
+        setError(null);
+      } catch (err) {
+        console.error("Error going to frame from graph:", err);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      totalFrames,
+      plugin,
+      modelRef,
+      superImposed,
+      deletePreviousReference,
+      loadNewReferenceStructure,
+      updateStreamingFrame,
+      performAlignment,
+    ]
+  );
+
+  const removeSuperimposedStructure = useCallback(async () => {
+    try {
+      const allStructures = plugin!.state.data.selectQ((q) =>
+        q.ofType(PluginStateObject.Molecule.Structure)
+      );
+
+      for (const struct of allStructures) {
+        const structRef = struct.transform.ref;
+        if (structRef !== streamingref?.ref) {
+          await plugin!.state.data.build().delete(structRef).commit();
+        }
+      }
     } catch (err) {
-      console.error("Error going to frame:", err);
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsLoading(false);
+      console.error("Error removing structures:", err);
     }
-  };
+  }, [plugin, streamingref]);
 
   return {
     isPlaying,
     currentFrame,
     isLoading,
-    fps: fps,
+    fps,
     error,
     play,
     pause,
     stop,
     goToFrame,
+    goToFrameFromGraph,
+    removeSuperimposedStructure,
     setFps,
   };
 };

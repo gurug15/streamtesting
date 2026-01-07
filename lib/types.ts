@@ -13,6 +13,7 @@ export interface Frame {
   z: { [key: string]: number };
 }
 
+import { Topology } from "molstar/lib/mol-model/structure";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
 
 export type UseMolstarReturn = {
@@ -45,12 +46,16 @@ export type UseMolstarReturn = {
   };
   serverTraj?: {
     trajectories: string[];
+    topologys: string[];
+    selectedTopology: string | null;
     selectedTrajectory: string | null;
     frameStarts: number[];
     isLoading: boolean;
     error: string | null;
     listTrajectories: () => Promise<void>;
+    listTopology: () => Promise<void>;
     selectTrajectory: (trajectory: string) => Promise<void>;
+    selectTopology: (topology: string) => Promise<File | undefined>;
     getFrameData: (frameIndex: number) => Promise<any>;
   };
   animation?: {

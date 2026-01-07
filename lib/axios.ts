@@ -1,7 +1,7 @@
 "use client";
 import axios from "axios";
-const BACKEND_URL: string | undefined =
-  process.env.NEXT_PUBLIC_FILEUPLOAD_URL || "http://localhost:5000";
+
+const BACKEND_URL: string | undefined = process.env.NEXT_PUBLIC_API_URL;
 if (!BACKEND_URL) {
   throw new Error("NEXT_PUBLIC_API_URL is not defined");
 }
@@ -10,12 +10,10 @@ const api = axios.create({
   baseURL: BACKEND_URL,
 });
 
-console.log("API Base URL:", BACKEND_URL);
 api.interceptors.request.use(
   (config) => {
     const token =
       typeof Window != "undefined" ? localStorage.getItem("token") : null;
-    console.log(token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
