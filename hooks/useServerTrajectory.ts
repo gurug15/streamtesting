@@ -1,17 +1,16 @@
+import api from "@/lib/axios";
 import { Frame, FrameResponse } from "@/lib/types";
-import axios from "axios";
-import { PluginContext } from "molstar/lib/mol-plugin/context";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 
-const MDSRV_SERVER_URL = process.env.NEXT_PUBLIC_MDSRV_URL;
+const MDSRV_SERVER_URL = "http://10.208.26.243:5000";
 
-export interface TrajectoryEntry {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  timestamp: number;
-}
+// export interface TrajectoryEntry {
+//   id: string;
+//   name: string;
+//   description: string;
+//   source: string;
+//   timestamp: number;
+// }
 
 export interface ProcessedFrame {
   x: Float32Array;
@@ -22,9 +21,12 @@ export interface ProcessedFrame {
 
 export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
   // ============ STATE ============
-  const [trajectories, setTrajectories] = useState<TrajectoryEntry[]>([]);
-  const [selectedTrajectory, setSelectedTrajectory] =
-    useState<TrajectoryEntry | null>(null);
+  const [trajectories, setTrajectories] = useState<string[]>([]);
+  const [topologys, setTopologies] = useState<string[]>([]);
+  const [selectedTopology, setSelectedTopology] = useState<string | null>(null);
+  const [selectedTrajectory, setSelectedTrajectory] = useState<string | null>(
+    null
+  );
   const [frameStarts, setFrameStarts] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,8 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
   const listTrajectories = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await axios(`${serverUrl}/list/trajectory`);
+      const response = await api.get(`/trajectory/list`);
+      console.log("traj list response: ", response.data);
       setTrajectories(response.data || []);
     } catch (err) {
       setError(`Failed to list trajectories: ${err}`);
@@ -49,7 +52,7 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
 
   // ============ 2. Select & Get Offsets ============
   const selectTrajectory = useCallback(
-    async (entry: TrajectoryEntry) => {
+    async (entry: string) => {
       try {
         setSelectedTrajectory(entry);
         setIsLoading(true);
@@ -57,15 +60,13 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
         prefetchedRanges.current.clear();
         lastPrefetchFrame.current = -1000;
 
-        const response = await axios(
-          `${serverUrl}/get/trajectory/${entry.id}/starts`
-        );
+        const response = await api.get(`/trajectory/${entry}/start`);
 
-        const offsets = response.data
-          .trim()
-          .split(/[,\s]+/)
-          .map(Number)
-          .filter((n: any) => !isNaN(n));
+        const offsets = response.data;
+        // .trim()
+        // .split(/[,\s]+/)
+        // .map(Number)
+        // .filter((n: any) => !isNaN(n));
         console.log("offset of traj: ", offsets);
         setFrameStarts(offsets);
         return offsets;
@@ -74,6 +75,39 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
         return [];
       } finally {
         setIsLoading(false);
+      }
+    },
+    [serverUrl]
+  );
+
+  const listTopology = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/topology/list`);
+      console.log("topo list response: ", response.data);
+      setTopologies(response.data || []);
+    } catch (err) {
+      setError(`Failed to list trajectories: ${err}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [serverUrl]);
+
+  // ============ 2. Select & Get Offsets ============
+  const selectTopology = useCallback(
+    async (entry: string) => {
+      try {
+        setSelectedTopology(entry);
+        const response = await api.get(`/topology/file/${entry}`, {
+          responseType: "blob",
+        });
+        const file = new File([response.data], entry, {
+          type: "chemical/x-pdb",
+        });
+
+        return file;
+      } catch (err) {
+        setError(`Failed to load offsets: ${err}`);
       }
     },
     [serverUrl]
@@ -163,12 +197,15 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
             const fetchEnd =
               frameIndex + 1 < frameStarts.length
                 ? frameStarts[frameIndex + 1]
-                : Infinity;
+                : frameStarts[frameStarts.length - 1];
 
             // Create promise for this frame
-            const framePromise = axios(
-              `${serverUrl}/get/trajectory/${selectedTrajectory.id}/frame/offset/${fetchStart}/${fetchEnd}`
-            )
+            const framePromise = api
+              .get(
+                `/trajectory/${
+                  selectedTrajectory as unknown as string
+                }/offset/${fetchStart}/${fetchEnd}`
+              )
               .then((response) => {
                 const data: FrameResponse = response.data;
 
@@ -250,6 +287,7 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
       if (!selectedTrajectory || frameStarts.length === 0) return null;
 
       try {
+        frameIndex = frameIndex % frameStarts.length;
         const batchStart = frameIndex;
         const batchEnd = Math.min(frameIndex + 1, frameStarts.length);
         const start = frameStarts[batchStart];
@@ -259,8 +297,10 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
             : frameStarts[frameStarts.length - 1] + 1;
 
         // Fetch current frame
-        const response = await axios(
-          `${serverUrl}/get/trajectory/${selectedTrajectory.id}/frame/offset/${start}/${end}`
+        const response = await api.get(
+          `/trajectory/${
+            selectedTrajectory as unknown as string
+          }/offset/${start}/${end}`
         );
         const data: FrameResponse = response.data;
 
@@ -300,12 +340,16 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
 
   return {
     trajectories,
+    topologys,
     selectedTrajectory,
+    selectedTopology,
     frameStarts,
     isLoading,
     error,
     listTrajectories,
+    listTopology,
     selectTrajectory,
+    selectTopology,
     getFrameData,
   };
 };
