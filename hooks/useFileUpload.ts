@@ -1,3 +1,4 @@
+"use client";
 import { Coordinates, Time } from "molstar/lib/mol-model/structure";
 import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 import { TrajectoryFromModelAndCoordinates } from "molstar/lib/mol-plugin-state/transforms/model";

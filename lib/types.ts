@@ -81,3 +81,10 @@ export interface RmsdUserInput {
   groupLsFit: number;
   groupRMSD: number;
 }
+
+export interface ProcessedFrame {
+  x: Float32Array;
+  y: Float32Array;
+  z: Float32Array;
+  count: number;
+}

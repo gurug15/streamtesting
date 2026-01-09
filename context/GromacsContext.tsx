@@ -1,5 +1,4 @@
 "use client";
-import { RmsdUserInput } from "@/lib/types";
 import {
   Dispatch,
   SetStateAction,
@@ -18,6 +17,7 @@ export interface TrajectoryFrameInput {
 }
 
 import { CheckedState } from "@radix-ui/react-checkbox";
+import { RmsdUserInput } from "@/lib/types";
 
 interface FileContextType {
   rmsdinputfilenames: RmsdUserInput;

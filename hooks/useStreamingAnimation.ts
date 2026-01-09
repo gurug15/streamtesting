@@ -1,3 +1,4 @@
+"use client";
 // hooks/useStreamingAnimation.ts
 import { useEffect, useRef, useState, useCallback } from "react";
 import { PluginContext } from "molstar/lib/mol-plugin/context";
@@ -6,11 +7,10 @@ import {
   applyFrameToMolstar,
   loadReferenceStructure,
 } from "@/lib/molstarStreaming";
-import { ProcessedFrame } from "./useServerTrajectory";
 import { useFileData } from "@/context/GromacsContext";
 import { useRMSD } from "./useRmsd";
-import { backendUrl } from "@/components/gromacs/GraphDisplay";
-import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
+import { ProcessedFrame } from "@/lib/types";
+import { backendUrl } from "@/lib/axios";
 
 type GetFrameFn = (index: number) => Promise<ProcessedFrame | null>;
 type RefRef = { structureRef: any; structure: any } | null;
@@ -280,22 +280,13 @@ export const useStreamingAnimation = (
     ]
   );
 
-  const removeSuperimposedStructure = useCallback(async () => {
+  const removeSuperimposedStructure = async () => {
     try {
-      const allStructures = plugin!.state.data.selectQ((q) =>
-        q.ofType(PluginStateObject.Molecule.Structure)
-      );
-
-      for (const struct of allStructures) {
-        const structRef = struct.transform.ref;
-        if (structRef !== streamingref?.ref) {
-          await plugin!.state.data.build().delete(structRef).commit();
-        }
-      }
+      await deletePreviousReference();
     } catch (err) {
       console.error("Error removing structures:", err);
     }
-  }, [plugin, streamingref]);
+  };
 
   return {
     isPlaying,

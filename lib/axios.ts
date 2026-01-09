@@ -6,6 +6,8 @@ if (!BACKEND_URL) {
   throw new Error("NEXT_PUBLIC_API_URL is not defined");
 }
 
+export const backendUrl = BACKEND_URL;
+
 const api = axios.create({
   baseURL: BACKEND_URL,
 });
@@ -13,7 +15,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token =
-      typeof Window != "undefined" ? localStorage.getItem("token") : null;
+      typeof window != "undefined" ? localStorage.getItem("token") : null;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

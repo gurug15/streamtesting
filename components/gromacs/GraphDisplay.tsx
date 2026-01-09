@@ -5,10 +5,11 @@ import { ChartComponent } from "./ChartComponet";
 import { useRMSD } from "@/hooks/useRmsd";
 import { Button } from "../ui/button";
 import { useFileData } from "@/context/GromacsContext";
-import { RmsdUserInput } from "@/lib/types";
 import { Download } from "lucide-react";
 import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
+import { RmsdUserInput } from "@/lib/types";
+import { backendUrl } from "@/lib/axios";
 
 interface GraphDisplayProps {
   graphData?: number[][][];
@@ -18,8 +19,6 @@ interface GraphDisplayProps {
   yLabel: string; // Replace 'any' with your specific graph data type if available
 }
 
-export const backendUrl =
-  process.env.REACT_APP_API_URL || "http://localhost:5000";
 export function GraphDisplay({
   // graphData,
   gotoFrameFromGraph,

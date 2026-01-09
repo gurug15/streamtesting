@@ -12,7 +12,6 @@ import { BuiltInCoordinatesFormat } from "molstar/lib/mol-plugin-state/formats/c
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
 import { BuiltInTrajectoryFormat } from "molstar/lib/mol-plugin-state/formats/trajectory";
 import { applyFrameToMolstar } from "@/lib/molstarStreaming";
-import { useServerTrajectory } from "./useServerTrajectory";
 
 export const useMolstar = (
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -35,7 +34,6 @@ export const useMolstar = (
   const [topologyModel, setTopologyModel] = useState<any>(null);
   const [cordinateRef, setCordinateRef] = useState<any>(null);
   const [modelRef, setModelRef] = useState<string | null>(null);
-  const { getFrameData } = useServerTrajectory("http://localhost:1337");
 
   // Effect for plugin initialization and disposal
   useEffect(() => {

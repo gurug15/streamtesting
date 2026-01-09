@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 // import { useServerTrajectory } from "@/hooks/useServerTrajectory";
 // import { PluginContext } from "molstar/lib/mol-plugin/context";
 // import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
-import { UseMolstarReturn } from "@/lib/types";
 import { useFileData } from "@/context/GromacsContext";
 // import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -12,8 +11,8 @@ import { Checkbox } from "./ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
 import { Label } from "./ui/label";
 import { useRMSD } from "@/hooks/useRmsd";
-import { backendUrl } from "./gromacs/GraphDisplay";
 import { loadReferenceStructure } from "@/lib/molstarStreaming";
+import { UseMolstarReturn } from "@/lib/types";
 
 const MolstarControls = ({
   state,
@@ -52,15 +51,13 @@ const MolstarControls = ({
     if (!zeroFrameSuperImposed) return null;
 
     try {
-      const outputFileName = await pdbFromFrame(downloadPdbInputFile);
-      if (!outputFileName.length) return null;
-
-      const pdbUrl = `${backendUrl}/analysis/download/pdb/${outputFileName}`;
-      const response = await fetch(pdbUrl);
-      const blob = await response.blob();
-      const file = new File([blob], outputFileName, {
-        type: "chemical/x-pdb",
-      });
+      const file: File | undefined = await serverTraj.selectTopology(
+        downloadPdbInputFile.topologyFileName
+      );
+      if (!file) {
+        alert("no topology file");
+        return;
+      }
 
       const refRef = await loadReferenceStructure(plugin!, file);
       setZerothStructureRef(refRef);

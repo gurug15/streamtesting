@@ -1,3 +1,4 @@
+"use client";
 // lib/molstarStreaming.ts
 import {
   Coordinates,
@@ -20,7 +21,7 @@ import { MolScriptBuilder as MS } from "molstar/lib/mol-script/language/builder"
 import { tmAlign } from "molstar/lib/mol-model/structure/structure/util/tm-align";
 import { compile } from "molstar/lib/mol-script/runtime/query/compiler";
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
-import { ProcessedFrame } from "@/hooks/useServerTrajectory";
+import { ProcessedFrame } from "./types";
 
 // --- Constants & Pre-compiled Queries ---
 
