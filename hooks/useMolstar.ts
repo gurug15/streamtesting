@@ -11,7 +11,6 @@ import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 import { BuiltInCoordinatesFormat } from "molstar/lib/mol-plugin-state/formats/coordinates";
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
 import { BuiltInTrajectoryFormat } from "molstar/lib/mol-plugin-state/formats/trajectory";
-import { applyFrameToMolstar } from "@/lib/molstarStreaming";
 
 export const useMolstar = (
   canvasRef: RefObject<HTMLCanvasElement | null>,

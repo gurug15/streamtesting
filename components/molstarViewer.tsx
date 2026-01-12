@@ -5,8 +5,6 @@ import MolstarControls from "./molstarControls";
 import { GraphDisplay } from "./gromacs/GraphDisplay";
 import { useServerTrajectory } from "@/hooks/useServerTrajectory";
 import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
-import { useRMSD } from "@/hooks/useRmsd";
-
 const MolstarViewer = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const parentRef = useRef<HTMLDivElement | null>(null);

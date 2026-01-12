@@ -3,7 +3,6 @@
 import {
   Coordinates,
   Time,
-  StructureElement,
   StructureSelection,
   QueryContext,
 } from "molstar/lib/mol-model/structure";

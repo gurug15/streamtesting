@@ -1,6 +1,5 @@
 "use client";
 
-import { useMolstar } from "@/hooks/useMolstar";
 import dynamic from "next/dynamic";
 
 const MolstarViewer = dynamic(() => import("@/components/molstarViewer"), {

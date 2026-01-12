@@ -1,11 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-// import { useServerTrajectory } from "@/hooks/useServerTrajectory";
-// import { PluginContext } from "molstar/lib/mol-plugin/context";
-// import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
 import { useFileData } from "@/context/GromacsContext";
-// import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Checkbox } from "./ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
