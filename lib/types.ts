@@ -42,6 +42,9 @@ export type UseMolstarReturn = {
     ) => Promise<void>;
     toggleTragractoryAnimation: () => Promise<void>;
     loadStructureRepresentation: () => Promise<string | null>;
+    onChangeBackgroundColor: (
+      event: React.ChangeEvent<HTMLInputElement>
+    ) => void;
     getModelRef: () => string | null;
   };
   serverTraj?: {

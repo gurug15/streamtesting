@@ -376,6 +376,35 @@ const MolstarControls = ({
           )}
         </div>
       )}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Colors</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="bgColor" className="text-xs">
+              Background
+            </Label>
+            <input
+              type="color"
+              id="bgColor"
+              value={state.bgColor}
+              onChange={handlers.onChangeBackgroundColor}
+              className="w-full h-10 rounded-md border cursor-pointer"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="structureColor" className="text-xs">
+              Structure
+            </Label>
+            <input
+              type="color"
+              id="structureColor"
+              value={state.structureColor}
+              onChange={handlers.onChangeStructureColor}
+              className="w-full h-10 rounded-md border cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

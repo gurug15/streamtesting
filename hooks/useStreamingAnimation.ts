@@ -40,7 +40,8 @@ export const useStreamingAnimation = (
   const fpsRef = useRef(fps);
   const prefetchedRef = useRef<Set<number>>(new Set());
 
-  const { superImposed, downloadPdbInputFile } = useFileData();
+  const { superImposed, downloadPdbInputFile, setStreamingStructureRef } =
+    useFileData();
   const { pdbFromFrame } = useRMSD();
 
   // Sync fps to ref
@@ -57,12 +58,13 @@ export const useStreamingAnimation = (
       const frameData = await getFrameData(currentFrameRef.current);
 
       if (frameData) {
-        const streamRef = await applyFrameToMolstar(
+        const { structureRef } = await applyFrameToMolstar(
           plugin,
           modelRef,
           frameData
         );
-        setStreamingRef(streamRef);
+        setStreamingRef(structureRef);
+        // setStreamingStructureRef(streamingStructureRef!);
         setCurrentFrame(currentFrameRef.current);
       }
 
@@ -161,7 +163,8 @@ export const useStreamingAnimation = (
             modelRef,
             frameData
           );
-          setStreamingRef(streamRef);
+          setStreamingRef(streamRef.structureRef);
+          // setStreamingStructureRef(streamRef.trajectoryCellRef!.transform.ref);
         }
       } catch (err) {
         console.error("Error updating streaming frame:", err);

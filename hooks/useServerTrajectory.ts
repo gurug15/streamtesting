@@ -34,6 +34,19 @@ export const useServerTrajectory = (serverUrl = backendUrl) => {
     }
   }, [serverUrl]);
 
+  const listTopology = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/topology/list`);
+      console.log("topo list response: ", response.data);
+      setTopologies(response.data || []);
+    } catch (err) {
+      setError(`Failed to list trajectories: ${err}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [serverUrl]);
+
   // ============ 2. Select & Get Offsets ============
   const selectTrajectory = useCallback(
     async (entry: string) => {
@@ -63,19 +76,6 @@ export const useServerTrajectory = (serverUrl = backendUrl) => {
     },
     [serverUrl]
   );
-
-  const listTopology = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get(`/topology/list`);
-      console.log("topo list response: ", response.data);
-      setTopologies(response.data || []);
-    } catch (err) {
-      setError(`Failed to list trajectories: ${err}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [serverUrl]);
 
   // ============ 2. Select & Get Offsets ============
   const selectTopology = useCallback(

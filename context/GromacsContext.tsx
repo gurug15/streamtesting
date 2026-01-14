@@ -21,6 +21,8 @@ interface FileContextType {
   setSuperImposed: Dispatch<SetStateAction<CheckedState>>;
   setDownloadPdbInputFile: Dispatch<SetStateAction<TrajectoryFrameInput>>;
   setRmsdInputFilenames: Dispatch<SetStateAction<RmsdUserInput>>;
+  streamingStructureRef: string;
+  setStreamingStructureRef: Dispatch<SetStateAction<string>>;
 }
 
 const Filecontext = createContext<FileContextType | undefined>(undefined);
@@ -30,6 +32,8 @@ export function GromacsFileProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const [streamingStructureRef, setStreamingStructureRef] =
+    useState<string>("");
   const [rmsdinputfilenames, setRmsdInputFilenames] = useState<RmsdUserInput>({
     trajectoryFileName: "",
     topologyFileName: "",
@@ -51,6 +55,8 @@ export function GromacsFileProvider({
     <Filecontext.Provider
       value={{
         rmsdinputfilenames,
+        setStreamingStructureRef,
+        streamingStructureRef,
         setRmsdInputFilenames,
         downloadPdbInputFile,
         setDownloadPdbInputFile,

@@ -109,6 +109,7 @@ export async function applyFrameToMolstar(
     // Step 2: Update trajectory
     const state = plugin.state.data;
     const trajectoryExisted = state.cells.has(TRAJ_REF);
+    const trajectoryCellRef = state.cells.get(TRAJ_REF);
 
     // We bind the modelRef (topology) with the new COORDS_REF (geometry)
     const data = await plugin
@@ -124,9 +125,10 @@ export async function applyFrameToMolstar(
         { dependsOn: [modelRef, COORDS_REF] }
       )
       .commit();
-
+    console.log("updateded data of traj file", data);
+    console.log("trajectory ref", trajectoryCellRef);
     // console.log("isthis required data", data.cell?.obj);
-
+    let streamingStructureRef: string | null = null;
     // Step 3: Preset only initial
     if (!trajectoryExisted) {
       await plugin.builders.structure.hierarchy.applyPreset(
@@ -134,7 +136,7 @@ export async function applyFrameToMolstar(
         "default"
       );
     }
-
+    console.log("TRAJREF", TRAJ_REF);
     // Note: Creating a new structure on every frame can be expensive.
     // If logic permits, consider updating an existing structure ref instead.
     const structureRef = await plugin.builders.structure.createStructure(
@@ -152,7 +154,7 @@ export async function applyFrameToMolstar(
       plugin.canvas3d.requestDraw();
     }
 
-    return structureRef;
+    return { structureRef };
   } catch (err) {
     // console.error("Error applying frame to mol*:", err);
     throw err;
