@@ -1,25 +1,9 @@
-import api from "@/lib/axios";
-import { Frame, FrameResponse } from "@/lib/types";
+"use client";
+import api, { backendUrl } from "@/lib/axios";
+import { Frame, FrameResponse, ProcessedFrame } from "@/lib/types";
 import { useState, useCallback, useRef } from "react";
 
-const MDSRV_SERVER_URL = "http://10.208.26.243:5000";
-
-// export interface TrajectoryEntry {
-//   id: string;
-//   name: string;
-//   description: string;
-//   source: string;
-//   timestamp: number;
-// }
-
-export interface ProcessedFrame {
-  x: Float32Array;
-  y: Float32Array;
-  z: Float32Array;
-  count: number;
-}
-
-export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
+export const useServerTrajectory = (serverUrl = backendUrl) => {
   // ============ STATE ============
   const [trajectories, setTrajectories] = useState<string[]>([]);
   const [topologys, setTopologies] = useState<string[]>([]);
@@ -43,6 +27,19 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
       const response = await api.get(`/trajectory/list`);
       console.log("traj list response: ", response.data);
       setTrajectories(response.data || []);
+    } catch (err) {
+      setError(`Failed to list trajectories: ${err}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [serverUrl]);
+
+  const listTopology = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/topology/list`);
+      console.log("topo list response: ", response.data);
+      setTopologies(response.data || []);
     } catch (err) {
       setError(`Failed to list trajectories: ${err}`);
     } finally {
@@ -79,19 +76,6 @@ export const useServerTrajectory = (serverUrl = MDSRV_SERVER_URL) => {
     },
     [serverUrl]
   );
-
-  const listTopology = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get(`/topology/list`);
-      console.log("topo list response: ", response.data);
-      setTopologies(response.data || []);
-    } catch (err) {
-      setError(`Failed to list trajectories: ${err}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [serverUrl]);
 
   // ============ 2. Select & Get Offsets ============
   const selectTopology = useCallback(

@@ -1,13 +1,5 @@
 "use client";
-import { RmsdUserInput } from "@/lib/types";
-import {
-  Dispatch,
-  SetStateAction,
-  use,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { Dispatch, SetStateAction, useContext, useState } from "react";
 import { createContext } from "react";
 
 export interface TrajectoryFrameInput {
@@ -18,6 +10,7 @@ export interface TrajectoryFrameInput {
 }
 
 import { CheckedState } from "@radix-ui/react-checkbox";
+import { RmsdUserInput } from "@/lib/types";
 
 interface FileContextType {
   rmsdinputfilenames: RmsdUserInput;
@@ -28,6 +21,8 @@ interface FileContextType {
   setSuperImposed: Dispatch<SetStateAction<CheckedState>>;
   setDownloadPdbInputFile: Dispatch<SetStateAction<TrajectoryFrameInput>>;
   setRmsdInputFilenames: Dispatch<SetStateAction<RmsdUserInput>>;
+  streamingStructureRef: string;
+  setStreamingStructureRef: Dispatch<SetStateAction<string>>;
 }
 
 const Filecontext = createContext<FileContextType | undefined>(undefined);
@@ -37,6 +32,8 @@ export function GromacsFileProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const [streamingStructureRef, setStreamingStructureRef] =
+    useState<string>("");
   const [rmsdinputfilenames, setRmsdInputFilenames] = useState<RmsdUserInput>({
     trajectoryFileName: "",
     topologyFileName: "",
@@ -58,6 +55,8 @@ export function GromacsFileProvider({
     <Filecontext.Provider
       value={{
         rmsdinputfilenames,
+        setStreamingStructureRef,
+        streamingStructureRef,
         setRmsdInputFilenames,
         downloadPdbInputFile,
         setDownloadPdbInputFile,

@@ -42,6 +42,9 @@ export type UseMolstarReturn = {
     ) => Promise<void>;
     toggleTragractoryAnimation: () => Promise<void>;
     loadStructureRepresentation: () => Promise<string | null>;
+    onChangeBackgroundColor: (
+      event: React.ChangeEvent<HTMLInputElement>
+    ) => void;
     getModelRef: () => string | null;
   };
   serverTraj?: {
@@ -80,4 +83,11 @@ export interface RmsdUserInput {
   lastFrame: number;
   groupLsFit: number;
   groupRMSD: number;
+}
+
+export interface ProcessedFrame {
+  x: Float32Array;
+  y: Float32Array;
+  z: Float32Array;
+  count: number;
 }

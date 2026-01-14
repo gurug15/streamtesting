@@ -11,8 +11,7 @@ import { PluginStateObject } from "molstar/lib/mol-plugin-state/objects";
 import { BuiltInCoordinatesFormat } from "molstar/lib/mol-plugin-state/formats/coordinates";
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
 import { BuiltInTrajectoryFormat } from "molstar/lib/mol-plugin-state/formats/trajectory";
-import { applyFrameToMolstar } from "@/lib/molstarStreaming";
-import { useServerTrajectory } from "./useServerTrajectory";
+import { useFileData } from "@/context/GromacsContext";
 
 export const useMolstar = (
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -35,8 +34,7 @@ export const useMolstar = (
   const [topologyModel, setTopologyModel] = useState<any>(null);
   const [cordinateRef, setCordinateRef] = useState<any>(null);
   const [modelRef, setModelRef] = useState<string | null>(null);
-  const { getFrameData } = useServerTrajectory("http://localhost:1337");
-
+  const { streamingStructureRef } = useFileData();
   // Effect for plugin initialization and disposal
   useEffect(() => {
     const initPlugin = async () => {
@@ -242,6 +240,28 @@ export const useMolstar = (
     }
   };
 
+  const handleChangeBackgroundColor = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newColor = event.target.value;
+    setBgColor(newColor); // Update React state
+
+    if (!plugin?.canvas3d) {
+      console.warn("Canvas not ready");
+      return;
+    }
+
+    // Use the new color value directly, not the stale state
+    const intColor = parseInt(newColor.replace("#", "0x"));
+    const colorValue = Color(intColor);
+
+    plugin.canvas3d.setProps({
+      renderer: {
+        backgroundColor: colorValue,
+      },
+    });
+  };
+
   const loadStructureRepresentation = async () => {
     if (!plugin || !topologyModel) {
       console.error("Plugin or topology model not ready");
@@ -302,10 +322,10 @@ export const useMolstar = (
     );
 
     if (structures.length === 0) return;
-
+    console.log("streaming ref", streamingStructureRef);
     await state
       .build()
-      .to(structures[0])
+      .to(streamingStructureRef)
       .applyOrUpdateTagged(
         "main-repr",
         StateTransforms.Representation.StructureRepresentation3D,
@@ -387,6 +407,7 @@ export const useMolstar = (
         handleSetRepresentation(e.target.value),
       toggleTragractoryAnimation: toggleTragractoryAnimation,
       loadStructureRepresentation: loadStructureRepresentation,
+      onChangeBackgroundColor: handleChangeBackgroundColor,
       getModelRef: getModelRef,
     },
   };

@@ -1,19 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-// import { useServerTrajectory } from "@/hooks/useServerTrajectory";
-// import { PluginContext } from "molstar/lib/mol-plugin/context";
-// import { useStreamingAnimation } from "@/hooks/useStreamingAnimation";
-import { UseMolstarReturn } from "@/lib/types";
 import { useFileData } from "@/context/GromacsContext";
-// import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Checkbox } from "./ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
 import { Label } from "./ui/label";
 import { useRMSD } from "@/hooks/useRmsd";
-import { backendUrl } from "./gromacs/GraphDisplay";
 import { loadReferenceStructure } from "@/lib/molstarStreaming";
+import { UseMolstarReturn } from "@/lib/types";
 
 const MolstarControls = ({
   state,
@@ -52,15 +47,13 @@ const MolstarControls = ({
     if (!zeroFrameSuperImposed) return null;
 
     try {
-      const outputFileName = await pdbFromFrame(downloadPdbInputFile);
-      if (!outputFileName.length) return null;
-
-      const pdbUrl = `${backendUrl}/analysis/download/pdb/${outputFileName}`;
-      const response = await fetch(pdbUrl);
-      const blob = await response.blob();
-      const file = new File([blob], outputFileName, {
-        type: "chemical/x-pdb",
-      });
+      const file: File | undefined = await serverTraj.selectTopology(
+        downloadPdbInputFile.topologyFileName
+      );
+      if (!file) {
+        alert("no topology file");
+        return;
+      }
 
       const refRef = await loadReferenceStructure(plugin!, file);
       setZerothStructureRef(refRef);
@@ -383,6 +376,35 @@ const MolstarControls = ({
           )}
         </div>
       )}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Colors</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="bgColor" className="text-xs">
+              Background
+            </Label>
+            <input
+              type="color"
+              id="bgColor"
+              value={state.bgColor}
+              onChange={handlers.onChangeBackgroundColor}
+              className="w-full h-10 rounded-md border cursor-pointer"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="structureColor" className="text-xs">
+              Structure
+            </Label>
+            <input
+              type="color"
+              id="structureColor"
+              value={state.structureColor}
+              onChange={handlers.onChangeStructureColor}
+              className="w-full h-10 rounded-md border cursor-pointer"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
