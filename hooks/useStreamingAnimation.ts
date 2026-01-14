@@ -40,8 +40,7 @@ export const useStreamingAnimation = (
   const fpsRef = useRef(fps);
   const prefetchedRef = useRef<Set<number>>(new Set());
 
-  const { superImposed, downloadPdbInputFile, setStreamingStructureRef } =
-    useFileData();
+  const { superImposed, downloadPdbInputFile } = useFileData();
   const { pdbFromFrame } = useRMSD();
 
   // Sync fps to ref
